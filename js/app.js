@@ -21,12 +21,24 @@ class MarkdownViewerPWA {
     const sampleButton = document.getElementById('sample-button');
     const dragDropArea = document.getElementById('drag-drop-area');
     const newFileButton = document.getElementById('new-file-button');
+    const navbarToggle = document.getElementById('navbar-toggle');
+    const navbarMenu = document.getElementById('navbar-menu');
     
     fileButton.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
     pasteButton.addEventListener('click', () => this.handlePaste());
     sampleButton.addEventListener('click', () => this.loadSampleContent());
     newFileButton.addEventListener('click', () => this.showUploadArea());
+    
+    if (navbarToggle && navbarMenu) {
+      navbarToggle.addEventListener('click', () => this.toggleNavbarMenu());
+      
+      document.addEventListener('click', (e) => {
+        if (!navbarToggle.contains(e.target) && !navbarMenu.contains(e.target)) {
+          this.closeNavbarMenu();
+        }
+      });
+    }
     
     dragDropArea.addEventListener('dragover', (e) => this.handleDragOver(e));
     dragDropArea.addEventListener('dragleave', (e) => this.handleDragLeave(e));
@@ -390,6 +402,33 @@ function example() {
   
   hideInstallPrompt() {
     document.getElementById('install-prompt').style.display = 'none';
+  }
+  
+  toggleNavbarMenu() {
+    const navbarToggle = document.getElementById('navbar-toggle');
+    const navbarMenu = document.getElementById('navbar-menu');
+    
+    if (navbarToggle && navbarMenu) {
+      const isActive = navbarMenu.classList.contains('active');
+      
+      if (isActive) {
+        navbarMenu.classList.remove('active');
+        navbarToggle.classList.remove('active');
+      } else {
+        navbarMenu.classList.add('active');
+        navbarToggle.classList.add('active');
+      }
+    }
+  }
+  
+  closeNavbarMenu() {
+    const navbarToggle = document.getElementById('navbar-toggle');
+    const navbarMenu = document.getElementById('navbar-menu');
+    
+    if (navbarToggle && navbarMenu) {
+      navbarMenu.classList.remove('active');
+      navbarToggle.classList.remove('active');
+    }
   }
 }
 

@@ -50,19 +50,49 @@
     </div>
 
     <div id="markdown-viewer" class="markdown-viewer" style="display: none;">
-      <div class="markdown-container">
-        <div class="markdown-toolbar">
-          <button id="toc-toggle" class="toc-toggle-btn" title="目次の表示/非表示">📋 目次</button>
-          <div class="toolbar-right">
-            <button id="new-file-button" class="new-file-button">📄 新しいファイル</button>
-            <span id="reading-stats" class="reading-stats"></span>
-            <select id="theme-selector">
-              <option value="system">システムテーマ</option>
-              <option value="light">ライトモード</option>
-              <option value="dark">ダークモード</option>
-            </select>
+      <nav class="navbar">
+        <div class="navbar-container">
+          <div class="navbar-brand">
+            <span class="brand-icon">📄</span>
+            <span class="brand-text">MD Viewer</span>
+          </div>
+          
+          <button class="navbar-toggle" id="navbar-toggle" aria-label="メニューを開く">
+            <span class="hamburger-line"></span>
+            <span class="hamburger-line"></span>
+            <span class="hamburger-line"></span>
+          </button>
+          
+          <div class="navbar-menu" id="navbar-menu">
+            <div class="navbar-nav">
+              <button id="toc-toggle" class="nav-item nav-button" title="目次の表示/非表示">
+                <span class="nav-icon">📋</span>
+                <span class="nav-text">目次</span>
+              </button>
+              
+              <button id="new-file-button" class="nav-item nav-button" title="新しいファイルを開く">
+                <span class="nav-icon">📄</span>
+                <span class="nav-text">新しいファイル</span>
+              </button>
+              
+              <div class="nav-item nav-select-wrapper">
+                <span class="nav-icon">🎨</span>
+                <select id="theme-selector" class="nav-select">
+                  <option value="system">システム</option>
+                  <option value="light">ライト</option>
+                  <option value="dark">ダーク</option>
+                </select>
+              </div>
+              
+              <div class="nav-item nav-stats">
+                <span id="reading-stats" class="reading-stats"></span>
+              </div>
+            </div>
           </div>
         </div>
+      </nav>
+      
+      <div class="markdown-container"></div>
         <div class="content-wrapper">
           <div id="toc-panel" class="toc-panel">
             <div class="toc-header">目次</div>
