@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Progressive Web App for viewing Markdown files with table of contents and reading enhancements">
+  <meta name="theme-color" content="#0366d6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="MD Viewer">
+  
+  <title>Markdown Viewer PWA</title>
+  
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/icon16.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="icons/icon48.png">
+  <link rel="icon" type="image/png" sizes="128x128" href="icons/icon128.png">
+  <link rel="apple-touch-icon" href="icons/icon128.png">
+  
+  <link rel="stylesheet" href="css/github-markdown.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="app">
+    <div id="upload-area" class="upload-area">
+      <div class="upload-content">
+        <div class="upload-icon">📄</div>
+        <h1>Markdown Viewer PWA</h1>
+        <p>スマホでも使えるMarkdownビューアー</p>
+        
+        <div class="upload-methods">
+          <div class="upload-method">
+            <input type="file" id="file-input" accept=".md,.markdown,.txt" style="display: none;">
+            <button id="file-button" class="upload-button">📁 ファイルを選択</button>
+          </div>
+          
+          <div class="upload-method">
+            <button id="paste-button" class="upload-button">📋 クリップボードから貼り付け</button>
+          </div>
+          
+          <div class="upload-method">
+            <button id="sample-button" class="upload-button">📖 サンプルを表示</button>
+          </div>
+        </div>
+        
+        <div class="drag-drop-area" id="drag-drop-area">
+          <p>ここにMarkdownファイルをドラッグ&ドロップ</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="markdown-viewer" class="markdown-viewer" style="display: none;">
+      <div class="markdown-container">
+        <div class="markdown-toolbar">
+          <button id="toc-toggle" class="toc-toggle-btn" title="目次の表示/非表示">📋 目次</button>
+          <div class="toolbar-right">
+            <button id="new-file-button" class="new-file-button">📄 新しいファイル</button>
+            <span id="reading-stats" class="reading-stats"></span>
+            <select id="theme-selector">
+              <option value="system">システムテーマ</option>
+              <option value="light">ライトモード</option>
+              <option value="dark">ダークモード</option>
+            </select>
+          </div>
+        </div>
+        <div class="content-wrapper">
+          <div id="toc-panel" class="toc-panel">
+            <div class="toc-header">目次</div>
+            <div id="toc-list" class="toc-list"></div>
+          </div>
+          <div class="markdown-content">
+            <div class="reading-progress">
+              <div class="reading-progress-bar"></div>
+            </div>
+            <div class="markdown-body"></div>
+          </div>
+        </div>
+        <button id="back-to-top" class="back-to-top" title="トップに戻る">↑</button>
+      </div>
+    </div>
+
+    <div id="install-prompt" class="install-prompt" style="display: none;">
+      <div class="install-content">
+        <div class="install-icon">📱</div>
+        <h3>アプリをインストール</h3>
+        <p>ホーム画面に追加してアプリのように使用できます</p>
+        <div class="install-buttons">
+          <button id="install-button" class="install-btn">インストール</button>
+          <button id="dismiss-button" class="dismiss-btn">後で</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="marked.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
