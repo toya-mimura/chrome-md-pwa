@@ -83,7 +83,7 @@
       const starts = [];
       let text = '';
       const walker = document.createTreeWalker(this.root, NodeFilter.SHOW_TEXT, {
-        acceptNode: (n) => (n.parentElement && n.parentElement.closest('.heading-anchor, script, style')
+        acceptNode: (n) => (n.parentElement && n.parentElement.closest('.heading-anchor, script, style, .katex-mathml, .mermaid-diagram, .code-header')
           ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT)
       });
       let n;

@@ -65,9 +65,14 @@
           </button>
 
           <div class="navbar-title" id="doc-title">MD Viewer</div>
+          <span id="translate-badge" class="translate-badge" hidden>訳文</span>
 
           <div class="navbar-actions">
             <span id="reading-stats" class="reading-stats"></span>
+
+            <button id="translate-button" class="icon-button" title="Gemini で翻訳" aria-label="Gemini で翻訳" aria-pressed="false">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 5h10M8 3v2M5 5c1 4 4 7 7 8M11 5c-1 4-4 7-7 8" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 21l4-9 4 9M14.5 18h5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
 
             <button id="search-button" class="icon-button" title="ページ内を検索 (Ctrl+F)" aria-label="ページ内を検索">
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -90,6 +95,9 @@
                   <span>コードを折り返す</span>
                   <input type="checkbox" id="wrap-code-toggle" class="switch">
                 </label>
+                <button type="button" id="translate-settings-button" class="settings-row settings-link">
+                  <span>Gemini 翻訳の設定…</span>
+                </button>
               </div>
             </div>
           </div>
@@ -140,6 +148,48 @@
       </button>
     </section>
 
+    <dialog id="gemini-dialog" class="dialog" translate="no">
+      <form method="dialog" id="gemini-form">
+        <h2>Gemini で翻訳</h2>
+        <p class="dialog-note">Google AI Studio で発行した API キーを入力してください。キーはこの端末のブラウザにだけ保存され、Gemini API 以外には送信されません。</p>
+
+        <label class="field">
+          <span>API キー</span>
+          <input type="password" id="gemini-key" autocomplete="off" spellcheck="false" placeholder="AIza...">
+        </label>
+
+        <label class="field">
+          <span>モデル</span>
+          <span class="field-row">
+            <input type="text" id="gemini-model" list="gemini-models" autocomplete="off" spellcheck="false" placeholder="gemini-flash-latest">
+            <button type="button" id="gemini-list-models" class="upload-button">一覧を取得</button>
+          </span>
+          <datalist id="gemini-models"></datalist>
+          <small>空欄なら gemini-flash-latest（最新の Flash を自動で使う）</small>
+        </label>
+
+        <label class="field">
+          <span>翻訳先</span>
+          <select id="translate-target">
+            <option value="ja">日本語</option>
+            <option value="en">English</option>
+            <option value="zh-CN">简体中文</option>
+            <option value="ko">한국어</option>
+          </select>
+        </label>
+
+        <p id="gemini-status" class="dialog-status" aria-live="polite"></p>
+        <p class="dialog-hint">ヒント：Google Cloud コンソールで、このキーに「ウェブサイトの制限」として <code id="gemini-host"></code> を設定しておくと、万一キーが漏れても他のサイトからは使えなくなります。</p>
+
+        <div class="dialog-buttons">
+          <button type="button" id="gemini-clear" class="text-button danger">キーを削除</button>
+          <span class="spacer"></span>
+          <button value="cancel" formnovalidate class="upload-button">キャンセル</button>
+          <button value="save" class="upload-button primary">保存</button>
+        </div>
+      </form>
+    </dialog>
+
     <div id="toast" class="toast" role="status" translate="no" hidden>
       <span id="toast-text"></span>
       <button id="toast-action" class="text-button toast-action" hidden></button>
@@ -161,6 +211,8 @@
   <script src="js/vendor/purify.min.js"></script>
   <script src="js/library.js"></script>
   <script src="js/search.js"></script>
+  <script src="js/rich.js"></script>
+  <script src="js/translate.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

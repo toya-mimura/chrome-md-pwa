@@ -56,6 +56,8 @@
       };
 
       this.currentDoc = null;      // { key, name, kind, url }
+      this.renderSeq = 0;
+      this.translation = { active: false, running: null, results: null };
       this.baseUrl = null;         // URL から開いた文書の相対パス解決用
       this.search = new DocSearch({
         root: this.el.body,
@@ -81,6 +83,8 @@
       this.registerServiceWorker();
       this.setupInstallPrompt();
       this.setupLaunchQueue();
+      if (window.MdRich) MdRich.bindCopyButtons(this.el.body);
+      this.setupTranslation();
       this.renderRecent();
       this.handleStartupParams();
     }
@@ -90,6 +94,7 @@
     configureMarked() {
       if (window.marked && typeof marked.setOptions === 'function') {
         marked.setOptions({ gfm: true, breaks: false });
+        if (window.MdRich) marked.use({ extensions: MdRich.mathExtensions });
       }
     }
 
@@ -399,6 +404,7 @@
       const previous = remember ? await MdLibrary.get(key) : null;
 
       this.baseUrl = kind === 'url' ? url : null;
+      this.resetTranslation();
       this.render(text, name);
       this.currentDoc = remember ? { key, name, kind, url, displayUrl } : null;
 
@@ -425,6 +431,157 @@
             });
           }
         });
+      }
+    }
+
+    /* ---------------- 翻訳（Gemini） ---------------- */
+
+    setupTranslation() {
+      const dlg = $('gemini-dialog');
+      const keyInput = $('gemini-key');
+      const modelInput = $('gemini-model');
+      const targetSelect = $('translate-target');
+      const datalist = $('gemini-models');
+      $('gemini-host').textContent = location.host || 'このサイト';
+
+      const openDialog = () => {
+        this.setSettingsOpen(false);
+        keyInput.value = MdTranslate.settings.key;
+        modelInput.value = MdTranslate.settings.model;
+        targetSelect.value = MdTranslate.settings.target;
+        $('gemini-status').textContent = '';
+        dlg.showModal();
+      };
+      this.openTranslateSettings = openDialog;
+
+      $('translate-button').addEventListener('click', () => this.toggleTranslation());
+      $('translate-settings-button').addEventListener('click', openDialog);
+
+      $('gemini-list-models').addEventListener('click', async () => {
+        const key = keyInput.value.trim();
+        const status = $('gemini-status');
+        if (!key) { status.textContent = '先に API キーを入力してください'; return; }
+        status.textContent = '取得中…';
+        try {
+          const models = await MdTranslate.listModels(key);
+          datalist.textContent = '';
+          models.forEach((m) => {
+            const o = document.createElement('option');
+            o.value = m;
+            datalist.appendChild(o);
+          });
+          status.textContent = `${models.length}件のモデルが使えます。入力欄から選べます`;
+        } catch (e) {
+          status.textContent = '取得できませんでした（' + e.message + '）。キーを確認してください';
+        }
+      });
+
+      $('gemini-clear').addEventListener('click', () => {
+        keyInput.value = '';
+        MdTranslate.settings.key = '';
+        $('gemini-status').textContent = 'キーを削除しました';
+      });
+
+      $('gemini-form').addEventListener('submit', (e) => {
+        if (e.submitter && e.submitter.value === 'cancel') return;
+        const prevTarget = MdTranslate.settings.target;
+        MdTranslate.settings.key = keyInput.value.trim();
+        MdTranslate.settings.model = modelInput.value.trim() || MdTranslate.DEFAULT_MODEL;
+        MdTranslate.settings.target = targetSelect.value;
+        // 翻訳先を変えたら、表示中の訳文は破棄する
+        if (prevTarget !== targetSelect.value && this.translation.active) this.showOriginal();
+      });
+    }
+
+    resetTranslation() {
+      if (this.translation.running) this.translation.running.abort();
+      this.translation = { active: false, running: null, results: null };
+      this.updateTranslateButton();
+    }
+
+    updateTranslateButton() {
+      const btn = $('translate-button');
+      btn.setAttribute('aria-pressed', String(this.translation.active));
+      btn.title = this.translation.active ? '原文に戻す' : 'Gemini で翻訳';
+      $('translate-badge').hidden = !this.translation.active;
+    }
+
+    showOriginal() {
+      if (this.translation.running) this.translation.running.abort();
+      this.translation.active = false;
+      this.translation.running = null;
+      this.updateTranslateButton();
+      this.render(this.sourceText, this.sourceName, { keepPosition: true });
+    }
+
+    async toggleTranslation() {
+      if (this.translation.active) {
+        this.showOriginal();
+        this.showToast('原文を表示しています');
+        return;
+      }
+      if (!MdTranslate.settings.key) {
+        this.openTranslateSettings();
+        return;
+      }
+
+      const target = MdTranslate.settings.target;
+      const source = this.sourceText;
+      const name = this.sourceName;
+      const hash = MdLibrary.hash(source);
+      const tokens = this.lastTokens;
+
+      // 以前の訳文が残っていれば使う
+      let cached = {};
+      if (this.currentDoc) {
+        const doc = await MdLibrary.get(this.currentDoc.key);
+        const tr = doc && doc.translation;
+        if (tr && tr.hash === hash && tr.target === target) cached = tr.results || {};
+      }
+
+      const controller = new AbortController();
+      this.translation = { active: true, running: controller, results: cached };
+      this.updateTranslateButton();
+      this.render(source, name, { overrides: cached, keepPosition: true });
+
+      try {
+        const results = await MdTranslate.translateTokens(tokens, target, {
+          signal: controller.signal,
+          cached,
+          onProgress: (res, done, total) => {
+            if (controller.signal.aborted) return;
+            this.translation.results = res;
+            if (done > 0) this.render(source, name, { overrides: res, keepPosition: true });
+            if (total > 0 && done < total) {
+              this.showToast(`翻訳中… ${done} / ${total}`, '中止', () => this.showOriginal());
+              clearTimeout(this.toastTimer);   // 翻訳中は出したままにする
+            }
+          }
+        });
+        if (controller.signal.aborted) return;
+        this.translation.running = null;
+        if (this.currentDoc) {
+          await MdLibrary.setField(this.currentDoc.key, 'translation', {
+            hash, target, results, model: MdTranslate.settings.model, saved: Date.now()
+          });
+        }
+        this.showToast(`${MdTranslate.LANGS[target] || target}に翻訳しました`, '原文に戻す', () => this.showOriginal());
+      } catch (err) {
+        if (controller.signal.aborted || err.name === 'AbortError') return;
+        this.translation.running = null;
+        let msg = '翻訳できませんでした：' + err.message;
+        if (err.status === 400 || err.status === 401 || err.status === 403) msg = 'API キーが正しくないか、使えない状態です（' + err.message + '）';
+        else if (err.status === 404) msg = 'モデルが見つかりません。設定の「一覧を取得」で使えるモデルを選んでください';
+        else if (err.status === 429) msg = '利用上限に達しました。少し待ってから再度お試しください';
+        // 途中まで訳せていればそのまま表示しておく
+        if (!this.translation.results || Object.keys(this.translation.results).length === 0) {
+          this.translation.active = false;
+          this.updateTranslateButton();
+          this.render(source, name, { keepPosition: true });
+        }
+        this.showToast(msg, '設定', () => this.openTranslateSettings());
+        clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => this.hideToast(), 12000);
       }
     }
 
@@ -579,18 +736,29 @@
 
     /* ---------------- 描画 ---------------- */
 
-    render(markdownText, sourceName) {
-      const rawHtml = this.renderWithSourceLines(markdownText);
+    /**
+     * 描画する。
+     * options.overrides … { トークン番号: 差し替える Markdown }（翻訳表示に使う）
+     * options.keepPosition … 今読んでいる位置を保つ（翻訳の途中経過の再描画など）
+     */
+    render(markdownText, sourceName, { overrides = null, keepPosition = false } = {}) {
+      const keep = keepPosition && !this.el.viewer.hidden ? this.currentPosition() : null;
+
+      const rawHtml = this.renderWithSourceLines(markdownText, overrides);
       const safeHtml = window.DOMPurify
         ? DOMPurify.sanitize(rawHtml, { ADD_ATTR: ['target'] })
         : rawHtml;
 
       this.el.body.innerHTML = safeHtml;
+      this.sourceText = markdownText;
+      this.sourceName = sourceName;
 
       this.decorateHeadings();
+      if (overrides) this.keepOriginalHeadingIds();
+      else this.originalHeadingIds = this.headings.map((h) => h.id);
       this.decorateCodeBlocks();
       this.decorateLinks();
-      this.applyLanguage();
+      this.applyLanguage(overrides ? MdTranslate.settings.target : null);
       this.buildToc();
       this.updateStats();
       this.updateTitle(sourceName);
@@ -599,14 +767,37 @@
       this.el.viewer.hidden = false;
       this.el.tocFilter.value = '';
       this.applyTocVisibility();
-      window.scrollTo(0, 0);
       this.activeId = null;
+      if (keep) this.restorePosition(keep);
+      else window.scrollTo(0, 0);
       this.onScroll();
       this.search.reset();
+
+      // コードの色分け・数式・図（必要なライブラリを読み込んでから仕上げる）
+      const seq = ++this.renderSeq;
+      if (window.MdRich) {
+        MdRich.enhance(this.el.body, () => seq !== this.renderSeq).then((changed) => {
+          if (!changed || seq !== this.renderSeq) return;
+          this.search.reset();
+          this.onScroll();
+        }).catch((e) => console.warn('enhance failed', e));
+      }
+    }
+
+    /** 翻訳表示でも見出しの ID を原文と同じにする（目次・文書内リンク・位置の復元が崩れないように） */
+    keepOriginalHeadingIds() {
+      const ids = this.originalHeadingIds || [];
+      if (ids.length !== this.headings.length) return;
+      this.headings.forEach((h, i) => {
+        h.id = ids[i];
+        const a = h.querySelector('.heading-anchor');
+        if (a) a.href = '#' + encodeURIComponent(ids[i]);
+      });
     }
 
     showUploadArea() {
       this.savePosition();
+      this.resetTranslation();
       this.currentDoc = null;
       this.search.close();
       this.hideToast();
@@ -624,25 +815,42 @@
      * Markdown をトップレベルのブロック単位で描画し、各要素に元ファイルの行番号
      * (data-ln) を付ける。行番号は marked のトークンの raw に含まれる改行数から求める。
      */
-    renderWithSourceLines(markdownText) {
+    renderWithSourceLines(markdownText, overrides = null) {
       const countNL = (str) => (str.match(/\n/g) || []).length;
       const src = markdownText.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
       const tokens = marked.lexer(src);
+      this.lastTokens = tokens;
       const tpl = document.createElement('template');
       const parts = [];
       let line = 1;
 
-      for (const token of tokens) {
-        const start = line;
-        line += countNL(token.raw || '');
-        if (token.type === 'space' || token.type === 'def') continue;
-
+      const emit = (token, start, links) => {
+        if (token.type === 'space' || token.type === 'def') return;
         const single = [token];
-        single.links = tokens.links;   // 参照リンク [text][id] を解決するため
+        single.links = links;   // 参照リンク [text][id] を解決するため
         tpl.innerHTML = marked.parser(single);
         this.annotateBlock(tpl.content, token, start, countNL);
         parts.push(tpl.innerHTML);
-      }
+      };
+
+      tokens.forEach((token, idx) => {
+        const start = line;
+        line += countNL(token.raw || '');
+
+        if (overrides && overrides[idx] != null) {
+          // 訳文：原文の行番号を起点に描画する
+          const subTokens = marked.lexer(overrides[idx]);
+          const links = Object.assign({}, tokens.links, subTokens.links);
+          let sub = start;
+          subTokens.forEach((st) => {
+            const s0 = sub;
+            sub += countNL(st.raw || '');
+            emit(st, s0, links);
+          });
+          return;
+        }
+        emit(token, start, tokens.links);
+      });
       return parts.join('\n');
     }
 
@@ -745,17 +953,26 @@
         code.textContent = '';
         code.appendChild(frag);
 
-        // ```言語 の行はヘッダーとして表示（行番号もここに出す）
-        if (pre.dataset.fenceLn || lang) {
-          const wrapper = document.createElement('div');
-          wrapper.className = 'code-block';
-          const header = document.createElement('div');
-          header.className = 'code-header';
-          header.textContent = lang || 'text';
-          if (pre.dataset.fenceLn) header.dataset.ln = pre.dataset.fenceLn;
-          pre.replaceWith(wrapper);
-          wrapper.append(header, pre);
-        }
+        // ヘッダー（```言語 の行。行番号もここに出す）＋コピーボタン
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block';
+        if (lang) wrapper.dataset.lang = lang.toLowerCase();
+        const header = document.createElement('div');
+        header.className = 'code-header';
+        if (pre.dataset.fenceLn) header.dataset.ln = pre.dataset.fenceLn;
+        const label = document.createElement('span');
+        label.className = 'code-lang';
+        label.textContent = lang || 'text';
+        const actions = document.createElement('span');
+        actions.className = 'code-actions';
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'code-action code-copy';
+        copy.textContent = 'コピー';
+        actions.appendChild(copy);
+        header.append(label, actions);
+        pre.replaceWith(wrapper);
+        wrapper.append(header, pre);
       });
     }
 
@@ -763,7 +980,13 @@
      * 本文の言語を判定して <html lang> に設定する。
      * 英語の文書なのに lang="ja" のままだと、Chrome が翻訳を提案しないため。
      */
-    applyLanguage() {
+    applyLanguage(forced = null) {
+      if (forced) {
+        document.documentElement.lang = forced;
+        this.el.body.setAttribute('lang', forced);
+        this.el.body.querySelectorAll('code').forEach((c) => c.setAttribute('translate', 'no'));
+        return;
+      }
       const text = (this.el.body.textContent || '').slice(0, 20000);
       const kana = (text.match(/[\u3040-\u30ff]/g) || []).length;
       const cjk = (text.match(CJK_RE) || []).length;

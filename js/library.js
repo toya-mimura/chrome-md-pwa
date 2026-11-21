@@ -89,6 +89,15 @@
       } catch (e) { /* noop */ }
     },
 
+    async setField(key, field, value) {
+      try {
+        const doc = await this.get(key);
+        if (!doc) return;
+        doc[field] = value;
+        await run('readwrite', (s) => s.put(doc));
+      } catch (e) { /* noop */ }
+    },
+
     async remove(key) {
       try { await run('readwrite', (s) => s.delete(key)); } catch (e) { /* noop */ }
     },
