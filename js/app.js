@@ -47,8 +47,28 @@
         docTitle: $('doc-title'),
         settingsButton: $('settings-button'),
         settingsMenu: $('settings-menu'),
-        fileInput: $('file-input')
+        fileInput: $('file-input'),
+        recentSection: $('recent-section'),
+        recentList: $('recent-list'),
+        toast: $('toast'),
+        toastText: $('toast-text'),
+        toastAction: $('toast-action')
       };
+
+      this.currentDoc = null;      // { key, name, kind, url }
+      this.baseUrl = null;         // URL から開いた文書の相対パス解決用
+      this.search = new DocSearch({
+        root: this.el.body,
+        bar: $('search-bar'),
+        input: $('search-input'),
+        count: $('search-count'),
+        prevBtn: $('search-prev'),
+        nextBtn: $('search-next'),
+        closeBtn: $('search-close'),
+        onOpenChange: (open) => {
+          document.documentElement.style.setProperty('--searchbar-h', open ? '52px' : '0px');
+        }
+      });
 
       this.headings = [];
       this.tocIndex = new Map();   // id -> { link, item, ancestors: [link...] }
@@ -61,6 +81,8 @@
       this.registerServiceWorker();
       this.setupInstallPrompt();
       this.setupLaunchQueue();
+      this.renderRecent();
+      this.handleStartupParams();
     }
 
     /* ---------------- 初期設定 ---------------- */
@@ -91,7 +113,7 @@
         const text = e.clipboardData && e.clipboardData.getData('text/plain');
         if (text && text.trim()) {
           e.preventDefault();
-          this.render(text, 'クリップボード');
+          this.openDocument(text, { kind: 'text', name: this.guessName(text, 'クリップボード') });
         }
       });
 
@@ -177,6 +199,51 @@
       window.addEventListener('resize', () => this.onScroll(), { passive: true });
 
       el.backToTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+      // URL から開く
+      $('url-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const url = $('url-input').value.trim();
+        if (url) this.openUrl(url);
+      });
+
+      // ページ内検索
+      $('search-button').addEventListener('click', () => {
+        if (this.search.isOpen) this.search.close(); else this.search.open();
+      });
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f' && !el.viewer.hidden) {
+          e.preventDefault();
+          this.search.open();
+        }
+      });
+
+      // 最近開いたファイル
+      el.recentList.addEventListener('click', (e) => this.onRecentClick(e));
+
+      // 本文中の .md リンク
+      el.body.addEventListener('click', (e) => {
+        const a = e.target.closest('a[data-md-link]');
+        if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        e.preventDefault();
+        this.openUrl(a.dataset.mdLink);
+      });
+
+      // 読んでいる位置の保存（スクロールが止まったら／アプリを離れるとき）
+      let saveTimer = null;
+      window.addEventListener('scroll', () => {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => this.savePosition(), 700);
+      }, { passive: true });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') this.savePosition();
+      });
+      window.addEventListener('pagehide', () => this.savePosition());
+
+      el.toastAction.addEventListener('click', () => {
+        if (this.toastHandler) this.toastHandler();
+        this.hideToast();
+      });
     }
 
     hasFiles(e) {
@@ -188,7 +255,7 @@
     async openFile(file) {
       try {
         const text = await file.text();
-        this.render(text, file.name);
+        await this.openDocument(text, { kind: 'file', name: file.name });
       } catch (err) {
         alert('ファイルを読み込めませんでした: ' + err.message);
       }
@@ -198,7 +265,7 @@
       try {
         const text = await navigator.clipboard.readText();
         if (text && text.trim()) {
-          this.render(text, 'クリップボード');
+          await this.openDocument(text, { kind: 'text', name: this.guessName(text, 'クリップボード') });
         } else {
           alert('クリップボードにテキストが見つかりません');
         }
@@ -211,20 +278,303 @@
       try {
         const res = await fetch('test-markdown.md', { cache: 'no-cache' });
         if (!res.ok) throw new Error(res.status);
-        this.render(await res.text(), 'test-markdown.md');
+        await this.openDocument(await res.text(), { kind: 'file', name: 'test-markdown.md', remember: false });
       } catch (e) {
         this.render('# サンプルを読み込めませんでした\n\nオフラインの場合は一度オンラインで開いてください。', 'サンプル');
       }
     }
 
     setupLaunchQueue() {
-      // manifest.json の file_handlers から起動されたとき
+      // manifest.json の file_handlers から起動されたとき（PC のインストール版）
       if (!('launchQueue' in window)) return;
       window.launchQueue.setConsumer(async (params) => {
         if (!params.files || params.files.length === 0) return;
         const file = await params.files[0].getFile();
         this.openFile(file);
       });
+    }
+
+    /** テキストの先頭見出しから名前を推測 */
+    guessName(text, fallback) {
+      const m = text.match(/^\s*#\s+(.+)$/m);
+      return m ? m[1].trim().slice(0, 60) : fallback;
+    }
+
+    /** GitHub / Gist のページ URL を、本文を直接取れる raw URL に変換する */
+    toRawUrl(input) {
+      let url;
+      try { url = new URL(input); } catch (e) { return null; }
+      if (!/^https?:$/.test(url.protocol)) return null;
+
+      // https://github.com/{owner}/{repo}/blob/{ref}/{path}
+      let m = url.hostname === 'github.com' && url.pathname.match(/^\/([^/]+)\/([^/]+)\/(?:blob|raw)\/(.+)$/);
+      if (m) return `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}`;
+
+      // https://github.com/{owner}/{repo} → README.md（デフォルトブランチ）
+      m = url.hostname === 'github.com' && url.pathname.match(/^\/([^/]+)\/([^/]+?)\/?$/);
+      if (m) return `https://raw.githubusercontent.com/${m[1]}/${m[2]}/HEAD/README.md`;
+
+      // https://gist.github.com/{user}/{id}
+      m = url.hostname === 'gist.github.com' && url.pathname.match(/^\/([^/]+)\/([0-9a-f]+)\/?$/i);
+      if (m) return `https://gist.githubusercontent.com/${m[1]}/${m[2]}/raw`;
+
+      return url.href;
+    }
+
+    async openUrl(input, { silent = false } = {}) {
+      const raw = this.toRawUrl(input);
+      if (!raw) {
+        if (!silent) alert('URL の形式が正しくありません');
+        return false;
+      }
+      try {
+        const res = await fetch(raw, { mode: 'cors', redirect: 'follow' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        const name = decodeURIComponent(new URL(raw).pathname.split('/').pop() || '') || raw;
+        await this.openDocument(text, { kind: 'url', name, url: raw, displayUrl: input });
+        return true;
+      } catch (err) {
+        if (!silent) {
+          alert('URL から読み込めませんでした（' + err.message + '）。\n'
+            + 'サイトが外部からの読み込みを許可していない（CORS）可能性があります。'
+            + 'GitHub の場合は raw のURL、またはファイルページのURLを試してください。');
+        }
+        return false;
+      }
+    }
+
+    /** 起動時：共有メニュー（Share Target）や ?url= から開かれた場合の処理 */
+    async handleStartupParams() {
+      const params = new URLSearchParams(location.search);
+      const clean = () => history.replaceState(null, '', location.pathname);
+
+      if (params.has('shared')) {
+        clean();
+        await this.openSharedPayload();
+        return;
+      }
+      if (params.get('url')) {
+        const url = params.get('url');
+        clean();
+        await this.openUrl(url);
+      }
+    }
+
+    async openSharedPayload() {
+      let payload = null;
+      try {
+        const cache = await caches.open('mdv-share-inbox');
+        const res = await cache.match('./__shared__');
+        if (res) {
+          payload = await res.json();
+          await cache.delete('./__shared__');
+        }
+      } catch (e) { /* noop */ }
+      if (!payload) return;
+
+      if (payload.fileText != null) {
+        await this.openDocument(payload.fileText, { kind: 'file', name: payload.fileName || '共有されたファイル' });
+        return;
+      }
+
+      // 共有されたのが URL だけなら、その URL を開く
+      const text = (payload.text || '').trim();
+      const urlOnly = payload.url || (/^https?:\/\/\S+$/.test(text) ? text : '');
+      if (urlOnly && (!text || text === urlOnly)) {
+        if (await this.openUrl(urlOnly, { silent: true })) return;
+      }
+      const body = [text, payload.url && payload.url !== text ? payload.url : ''].filter(Boolean).join('\n\n');
+      if (body) {
+        await this.openDocument(body, { kind: 'text', name: payload.title || this.guessName(body, '共有されたテキスト') });
+      }
+    }
+
+    /**
+     * 文書を開く共通の入口：描画 → 前回の位置を復元 → 最近開いたファイルに保存
+     */
+    async openDocument(text, { kind, name, url = null, displayUrl = null, remember = true }) {
+      this.savePosition();
+      const key = MdLibrary.keyFor({ kind, name, url, content: text });
+      const previous = remember ? await MdLibrary.get(key) : null;
+
+      this.baseUrl = kind === 'url' ? url : null;
+      this.render(text, name);
+      this.currentDoc = remember ? { key, name, kind, url, displayUrl } : null;
+
+      if (remember) {
+        await MdLibrary.save({
+          key,
+          name,
+          kind,
+          url,
+          displayUrl,
+          content: text,
+          chars: text.length,
+          opened: Date.now(),
+          position: previous ? previous.position : null
+        });
+      }
+
+      if (previous && previous.position && previous.position.line > 1) {
+        // 画像などのレイアウトが落ち着いてから復元する
+        requestAnimationFrame(() => {
+          if (this.restorePosition(previous.position)) {
+            this.showToast(`前回の位置（${previous.position.line}行目）から再開しました`, '最初から', () => {
+              window.scrollTo({ top: 0 });
+            });
+          }
+        });
+      }
+    }
+
+    /* ---------------- 読んでいる位置 ---------------- */
+
+    /** 画面上端にある要素の「元ファイルの行番号」と、その要素内のずれを返す */
+    currentPosition() {
+      const navbarH = this.topOffset();
+      const els = this.el.body.querySelectorAll('[data-ln]');
+      let best = null;
+      for (const el of els) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom > navbarH + 4) { best = { el, r }; break; }
+      }
+      if (!best) return null;
+      return {
+        line: Number(best.el.dataset.ln),
+        offset: Math.max(0, Math.round(navbarH - best.r.top)),
+        ratio: this.scrollRatio()
+      };
+    }
+
+    scrollRatio() {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      return max > 0 ? window.scrollY / max : 0;
+    }
+
+    topOffset() {
+      const cs = getComputedStyle(document.documentElement);
+      return (parseFloat(cs.getPropertyValue('--navbar-h')) || 56)
+        + (parseFloat(cs.getPropertyValue('--searchbar-h')) || 0);
+    }
+
+    savePosition() {
+      if (!this.currentDoc || this.el.viewer.hidden) return;
+      const pos = window.scrollY < 40 ? { line: 1, offset: 0, ratio: 0 } : this.currentPosition();
+      if (pos) MdLibrary.updatePosition(this.currentDoc.key, { ...pos, saved: Date.now() });
+    }
+
+    restorePosition(pos) {
+      const els = Array.from(this.el.body.querySelectorAll('[data-ln]'));
+      if (!els.length) return false;
+      // 保存した行番号以下で最も近い要素（ファイルが編集されていても近い位置に戻る）
+      let target = null;
+      for (const el of els) {
+        if (Number(el.dataset.ln) <= pos.line) target = el; else break;
+      }
+      if (!target) return false;
+      const top = window.scrollY + target.getBoundingClientRect().top - this.topOffset()
+        + (Number(target.dataset.ln) === pos.line ? pos.offset || 0 : 0);
+      window.scrollTo({ top: Math.max(0, top) });
+      return true;
+    }
+
+    /* ---------------- 最近開いたファイル ---------------- */
+
+    async renderRecent() {
+      const docs = await MdLibrary.list();
+      const list = this.el.recentList;
+      list.textContent = '';
+      this.el.recentSection.hidden = docs.length === 0;
+
+      docs.forEach((doc) => {
+        const li = document.createElement('li');
+        li.className = 'recent-item';
+        li.dataset.key = doc.key;
+
+        const open = document.createElement('button');
+        open.className = 'recent-open';
+        open.type = 'button';
+
+        const icon = document.createElement('span');
+        icon.className = 'recent-icon';
+        icon.textContent = doc.kind === 'url' ? '🔗' : doc.kind === 'file' ? '📄' : '📋';
+
+        const textWrap = document.createElement('span');
+        textWrap.className = 'recent-text';
+        const name = document.createElement('span');
+        name.className = 'recent-name';
+        name.textContent = doc.name;
+        const meta = document.createElement('span');
+        meta.className = 'recent-meta';
+        const where = doc.position && doc.position.line > 1 ? ` · ${doc.position.line}行目まで` : '';
+        const unavailable = !doc.content && !doc.url ? ' · 内容は保存されていません' : '';
+        meta.textContent = this.relativeTime(doc.opened) + where + unavailable;
+        textWrap.append(name, meta);
+
+        open.append(icon, textWrap);
+
+        const del = document.createElement('button');
+        del.className = 'recent-remove';
+        del.type = 'button';
+        del.title = '履歴から削除';
+        del.setAttribute('aria-label', `${doc.name} を履歴から削除`);
+        del.textContent = '×';
+
+        li.append(open, del);
+        list.appendChild(li);
+      });
+    }
+
+    async onRecentClick(e) {
+      const li = e.target.closest('.recent-item');
+      if (!li) return;
+      const key = li.dataset.key;
+
+      if (e.target.closest('.recent-remove')) {
+        await MdLibrary.remove(key);
+        this.renderRecent();
+        return;
+      }
+
+      const doc = await MdLibrary.get(key);
+      if (!doc) return;
+      if (doc.kind === 'url' && doc.url) {
+        // URL は最新版を取りに行き、だめなら保存済みの内容を表示
+        if (await this.openUrl(doc.displayUrl || doc.url, { silent: true })) return;
+      }
+      if (doc.content) {
+        await this.openDocument(doc.content, { kind: doc.kind, name: doc.name, url: doc.url, displayUrl: doc.displayUrl });
+      } else {
+        alert('このファイルは大きすぎたため内容が保存されていません。もう一度ファイルを選択してください。');
+      }
+    }
+
+    relativeTime(ts) {
+      const diff = (Date.now() - ts) / 1000;
+      if (diff < 60) return 'たった今';
+      if (diff < 3600) return `${Math.floor(diff / 60)}分前`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}時間前`;
+      if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}日前`;
+      return new Date(ts).toLocaleDateString('ja-JP');
+    }
+
+    /* ---------------- トースト ---------------- */
+
+    showToast(text, actionLabel, handler) {
+      const el = this.el;
+      el.toastText.textContent = text;
+      el.toastAction.hidden = !actionLabel;
+      el.toastAction.textContent = actionLabel || '';
+      this.toastHandler = handler || null;
+      el.toast.hidden = false;
+      clearTimeout(this.toastTimer);
+      this.toastTimer = setTimeout(() => this.hideToast(), 6000);
+    }
+
+    hideToast() {
+      this.el.toast.hidden = true;
+      this.toastHandler = null;
     }
 
     /* ---------------- 描画 ---------------- */
@@ -240,6 +590,7 @@
       this.decorateHeadings();
       this.decorateCodeBlocks();
       this.decorateLinks();
+      this.applyLanguage();
       this.buildToc();
       this.updateStats();
       this.updateTitle(sourceName);
@@ -251,9 +602,16 @@
       window.scrollTo(0, 0);
       this.activeId = null;
       this.onScroll();
+      this.search.reset();
     }
 
     showUploadArea() {
+      this.savePosition();
+      this.currentDoc = null;
+      this.search.close();
+      this.hideToast();
+      this.renderRecent();
+      document.documentElement.lang = 'ja';
       this.closeTocSheet();
       this.setSettingsOpen(false);
       this.el.viewer.hidden = true;
@@ -368,6 +726,7 @@
     decorateCodeBlocks() {
       this.el.body.querySelectorAll('pre > code').forEach((code) => {
         const pre = code.parentElement;
+        pre.setAttribute('translate', 'no');   // コードは自動翻訳させない
         const langClass = Array.from(code.classList).find((c) => c.startsWith('language-'));
         const lang = langClass ? langClass.slice('language-'.length) : '';
         const codeStart = pre.dataset.codeStart ? Number(pre.dataset.codeStart) : null;
@@ -400,9 +759,50 @@
       });
     }
 
+    /**
+     * 本文の言語を判定して <html lang> に設定する。
+     * 英語の文書なのに lang="ja" のままだと、Chrome が翻訳を提案しないため。
+     */
+    applyLanguage() {
+      const text = (this.el.body.textContent || '').slice(0, 20000);
+      const kana = (text.match(/[\u3040-\u30ff]/g) || []).length;
+      const cjk = (text.match(CJK_RE) || []).length;
+      const latin = (text.match(/[A-Za-z]/g) || []).length;
+      let lang = 'en';
+      if (kana > 20 || (cjk > 0 && kana / Math.max(1, cjk) > 0.1 && cjk / Math.max(1, cjk + latin / 4) > 0.15)) lang = 'ja';
+      else if (cjk / Math.max(1, cjk + latin / 4) > 0.3) lang = 'zh';
+      document.documentElement.lang = lang;
+      this.el.body.setAttribute('lang', lang);
+
+      // インラインコードも翻訳させない
+      this.el.body.querySelectorAll('code').forEach((c) => c.setAttribute('translate', 'no'));
+    }
+
     decorateLinks() {
+      // URL から開いた文書は、相対パスの画像・リンクを元の場所基準で解決する
+      if (this.baseUrl) {
+        this.el.body.querySelectorAll('img[src]').forEach((img) => {
+          const src = img.getAttribute('src');
+          if (src && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(src)) {
+            try { img.src = new URL(src, this.baseUrl).href; } catch (e) { /* noop */ }
+          }
+        });
+        this.el.body.querySelectorAll('a[href]').forEach((a) => {
+          const href = a.getAttribute('href');
+          if (href && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(href)) {
+            try { a.href = new URL(href, this.baseUrl).href; } catch (e) { /* noop */ }
+          }
+        });
+      }
+
       this.el.body.querySelectorAll('a[href]').forEach((a) => {
         const href = a.getAttribute('href');
+        // 別の .md へのリンクはこのビューアで開く
+        if (/^https?:\/\//i.test(href) && /\.(md|markdown|mdown|mkd)(?:[?#].*)?$/i.test(new URL(href).pathname + new URL(href).search)) {
+          a.dataset.mdLink = href;
+          a.title = 'このビューアで開く';
+          return;
+        }
         if (/^https?:\/\//i.test(href)) {
           a.target = '_blank';
           a.rel = 'noopener noreferrer';

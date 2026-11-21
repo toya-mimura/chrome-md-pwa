@@ -39,7 +39,7 @@
   font-weight: 600;
   line-height: 1.35;
   /* sticky ナビバーに見出しが隠れないように */
-  scroll-margin-top: calc(var(--navbar-h) + 16px);
+  scroll-margin-top: calc(var(--navbar-h) + var(--searchbar-h, 0px) + 16px);
   position: relative;
 }
 
