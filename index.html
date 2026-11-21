@@ -25,7 +25,7 @@
 <body>
   <div id="app">
     <!-- ===== ファイル選択画面 ===== -->
-    <section id="upload-area" class="upload-area">
+    <section id="upload-area" class="upload-area" translate="no">
       <div class="upload-content">
         <div class="upload-icon" aria-hidden="true">📄</div>
         <h1>Markdown Viewer</h1>
@@ -38,8 +38,18 @@
           <button id="sample-button" class="upload-button">📖 サンプルを表示</button>
         </div>
 
+        <form id="url-form" class="url-form" autocomplete="off">
+          <input type="url" id="url-input" class="url-input" placeholder="URLから開く（GitHub・Gist も可）" inputmode="url" aria-label="MarkdownのURL">
+          <button type="submit" class="upload-button url-button">開く</button>
+        </form>
+
         <div class="drag-drop-area" id="drag-drop-area">
           <p>ここにMarkdownファイルをドラッグ&amp;ドロップ</p>
+        </div>
+
+        <div id="recent-section" class="recent-section" hidden>
+          <div class="recent-header">最近開いたファイル</div>
+          <ul id="recent-list" class="recent-list"></ul>
         </div>
       </div>
     </section>
@@ -48,7 +58,7 @@
     <section id="markdown-viewer" class="markdown-viewer" hidden>
       <div class="reading-progress" aria-hidden="true"><div class="reading-progress-bar"></div></div>
 
-      <nav class="navbar">
+      <nav class="navbar" translate="no">
         <div class="navbar-container">
           <button id="toc-toggle" class="icon-button" title="目次の表示/非表示" aria-label="目次の表示/非表示" aria-controls="toc-panel">
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h13" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
@@ -58,6 +68,10 @@
 
           <div class="navbar-actions">
             <span id="reading-stats" class="reading-stats"></span>
+
+            <button id="search-button" class="icon-button" title="ページ内を検索 (Ctrl+F)" aria-label="ページ内を検索">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
 
             <button id="new-file-button" class="icon-button" title="別のファイルを開く" aria-label="別のファイルを開く">
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/></svg>
@@ -82,17 +96,33 @@
         </div>
       </nav>
 
+      <div id="search-bar" class="search-bar" translate="no" hidden>
+        <div class="search-inner">
+          <input type="search" id="search-input" class="search-input" placeholder="ページ内を検索" aria-label="ページ内を検索" enterkeyhint="search">
+          <span id="search-count" class="search-count" aria-live="polite"></span>
+          <button id="search-prev" class="icon-button" title="前へ (Shift+Enter)" aria-label="前の一致">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="search-next" class="icon-button" title="次へ (Enter)" aria-label="次の一致">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="search-close" class="icon-button" title="閉じる (Esc)" aria-label="検索を閉じる">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
       <div class="layout" id="layout">
         <aside id="toc-panel" class="toc-panel" aria-label="目次">
           <div class="toc-sheet-handle" aria-hidden="true"></div>
-          <div class="toc-header">
+          <div class="toc-header" translate="no">
             <span>目次</span>
             <div class="toc-header-actions">
               <button id="toc-expand-all" class="text-button" title="すべて展開">展開</button>
               <button id="toc-collapse-all" class="text-button" title="すべて折りたたむ">折りたたむ</button>
             </div>
           </div>
-          <input type="search" id="toc-filter" class="toc-filter" placeholder="見出しを絞り込み…" aria-label="見出しを絞り込み">
+          <input type="search" id="toc-filter" class="toc-filter" translate="no" placeholder="見出しを絞り込み…" aria-label="見出しを絞り込み">
           <nav id="toc-list" class="toc-list"></nav>
         </aside>
 
@@ -110,7 +140,12 @@
       </button>
     </section>
 
-    <div id="install-prompt" class="install-prompt" hidden>
+    <div id="toast" class="toast" role="status" translate="no" hidden>
+      <span id="toast-text"></span>
+      <button id="toast-action" class="text-button toast-action" hidden></button>
+    </div>
+
+    <div id="install-prompt" class="install-prompt" translate="no" hidden>
       <div class="install-content">
         <strong>アプリをインストール</strong>
         <p>ホーム画面に追加してアプリのように使えます</p>
@@ -124,6 +159,8 @@
 
   <script src="js/vendor/marked.min.js"></script>
   <script src="js/vendor/purify.min.js"></script>
+  <script src="js/library.js"></script>
+  <script src="js/search.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

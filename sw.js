@@ -3,8 +3,11 @@
  * - アプリ本体は stale-while-revalidate：キャッシュから即表示しつつ裏で更新し、
  *   次回起動時には新しい版が使われる
  * - 更新時は CACHE_VERSION を上げる
+ * - Android の「共有」から送られたファイル/テキスト（Share Target）を受け取り、
+ *   一時的にキャッシュへ置いてからアプリに渡す
  */
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
+const SHARE_CACHE = 'mdv-share-inbox';
 const CACHE_NAME = `md-viewer-${CACHE_VERSION}`;
 
 const PRECACHE = [
@@ -13,6 +16,8 @@ const PRECACHE = [
   './css/github-markdown.css',
   './css/app.css',
   './js/app.js',
+  './js/library.js',
+  './js/search.js',
   './js/vendor/marked.min.js',
   './js/vendor/purify.min.js',
   './manifest.json',
@@ -46,6 +51,14 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  const reqUrl = new URL(req.url);
+
+  // 共有メニューから送られてきたデータ（manifest.json の share_target）
+  if (req.method === 'POST' && reqUrl.origin === self.location.origin && reqUrl.pathname.endsWith('/share-target')) {
+    event.respondWith(handleShare(req));
+    return;
+  }
+
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
@@ -79,3 +92,26 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+async function handleShare(request) {
+  const redirectTo = new URL('./?shared=1', self.registration.scope).href;
+  try {
+    const form = await request.formData();
+    const payload = {
+      title: form.get('title') || '',
+      text: form.get('text') || '',
+      url: form.get('url') || ''
+    };
+    const file = form.get('file');
+    if (file && typeof file === 'object' && 'text' in file) {
+      payload.fileName = file.name || 'shared.md';
+      payload.fileText = await file.text();
+    }
+    const cache = await caches.open(SHARE_CACHE);
+    await cache.put(new URL('./__shared__', self.registration.scope).href,
+      new Response(JSON.stringify(payload), { headers: { 'Content-Type': 'application/json' } }));
+  } catch (e) {
+    // 受け取りに失敗してもアプリは開く
+  }
+  return Response.redirect(redirectTo, 303);
+}
