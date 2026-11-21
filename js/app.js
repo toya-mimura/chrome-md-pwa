@@ -25,9 +25,8 @@
   class MarkdownViewerPWA {
     constructor() {
       this.prefs = {
-        theme: store.get('theme', 'system'),
         tocVisible: store.get('tocVisible', 'true') !== 'false',
-        lineNumbers: store.get('lineNumbers', 'true') !== 'false',
+        lineNumbers: store.get('sourceLineNumbers', 'true') !== 'false',
         wrapCode: store.get('wrapCode', 'false') === 'true'
       };
 
@@ -58,7 +57,6 @@
 
       this.configureMarked();
       this.bindStaticEvents();
-      this.applyTheme(this.prefs.theme);
       this.applyCodePrefs();
       this.registerServiceWorker();
       this.setupInstallPrompt();
@@ -144,20 +142,13 @@
       document.addEventListener('click', (e) => {
         if (!el.settingsMenu.hidden && !el.settingsMenu.contains(e.target)) this.setSettingsOpen(false);
       });
-      el.settingsMenu.querySelectorAll('[data-theme-value]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          this.prefs.theme = btn.dataset.themeValue;
-          store.set('theme', this.prefs.theme);
-          this.applyTheme(this.prefs.theme);
-        });
-      });
       const lnToggle = $('line-numbers-toggle');
       const wrapToggle = $('wrap-code-toggle');
       lnToggle.checked = this.prefs.lineNumbers;
       wrapToggle.checked = this.prefs.wrapCode;
       lnToggle.addEventListener('change', () => {
         this.prefs.lineNumbers = lnToggle.checked;
-        store.set('lineNumbers', this.prefs.lineNumbers);
+        store.set('sourceLineNumbers', this.prefs.lineNumbers);
         this.applyCodePrefs();
       });
       wrapToggle.addEventListener('change', () => {
@@ -239,7 +230,7 @@
     /* ---------------- 描画 ---------------- */
 
     render(markdownText, sourceName) {
-      const rawHtml = marked.parse(markdownText);
+      const rawHtml = this.renderWithSourceLines(markdownText);
       const safeHtml = window.DOMPurify
         ? DOMPurify.sanitize(rawHtml, { ADD_ATTR: ['target'] })
         : rawHtml;
@@ -269,6 +260,79 @@
       this.el.upload.hidden = false;
       document.title = 'Markdown Viewer PWA';
       window.scrollTo(0, 0);
+    }
+
+    /**
+     * Markdown をトップレベルのブロック単位で描画し、各要素に元ファイルの行番号
+     * (data-ln) を付ける。行番号は marked のトークンの raw に含まれる改行数から求める。
+     */
+    renderWithSourceLines(markdownText) {
+      const countNL = (str) => (str.match(/\n/g) || []).length;
+      const src = markdownText.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+      const tokens = marked.lexer(src);
+      const tpl = document.createElement('template');
+      const parts = [];
+      let line = 1;
+
+      for (const token of tokens) {
+        const start = line;
+        line += countNL(token.raw || '');
+        if (token.type === 'space' || token.type === 'def') continue;
+
+        const single = [token];
+        single.links = tokens.links;   // 参照リンク [text][id] を解決するため
+        tpl.innerHTML = marked.parser(single);
+        this.annotateBlock(tpl.content, token, start, countNL);
+        parts.push(tpl.innerHTML);
+      }
+      return parts.join('\n');
+    }
+
+    annotateBlock(frag, token, start, countNL) {
+      const el = frag.firstElementChild;
+      if (!el) return;
+
+      switch (token.type) {
+        case 'code': {
+          const fenced = token.codeBlockStyle !== 'indented';
+          if (fenced) el.dataset.fenceLn = start;
+          el.dataset.codeStart = fenced ? start + 1 : start;
+          break;
+        }
+        case 'list':
+          this.annotateList(el, token, start, countNL);
+          break;
+        case 'table': {
+          const th = el.querySelector('thead th');
+          if (th) th.dataset.ln = start;
+          el.querySelectorAll('tbody tr').forEach((tr, i) => {
+            if (tr.firstElementChild) tr.firstElementChild.dataset.ln = start + 2 + i;
+          });
+          break;
+        }
+        default:
+          el.dataset.ln = start;
+      }
+    }
+
+    annotateList(listEl, token, start, countNL) {
+      const lis = Array.from(listEl.children).filter((c) => c.tagName === 'LI');
+      let line = start;
+      token.items.forEach((item, i) => {
+        const li = lis[i];
+        if (!li) return;
+        li.dataset.ln = line;
+
+        // 入れ子のリスト
+        const nested = Array.from(li.children).filter((c) => c.tagName === 'UL' || c.tagName === 'OL');
+        let sub = line;
+        let k = 0;
+        (item.tokens || []).forEach((t) => {
+          if (t.type === 'list' && nested[k]) this.annotateList(nested[k++], t, sub, countNL);
+          sub += countNL(t.raw || '');
+        });
+        line += countNL(item.raw || '');
+      });
     }
 
     /** GitHub 互換の見出しスラッグ（日本語などの Unicode 文字を保持する） */
@@ -305,9 +369,10 @@
       this.el.body.querySelectorAll('pre > code').forEach((code) => {
         const pre = code.parentElement;
         const langClass = Array.from(code.classList).find((c) => c.startsWith('language-'));
-        if (langClass) pre.dataset.lang = langClass.slice('language-'.length);
+        const lang = langClass ? langClass.slice('language-'.length) : '';
+        const codeStart = pre.dataset.codeStart ? Number(pre.dataset.codeStart) : null;
 
-        // 各行を <span class="line"> で包む（行番号は CSS の counter で描画）
+        // 各行を <span class="line" data-ln="元の行番号"> で包む
         const text = code.textContent.replace(/\n$/, '');
         const lines = text.split('\n');
         const frag = document.createDocumentFragment();
@@ -315,13 +380,23 @@
           const span = document.createElement('span');
           span.className = 'line';
           span.textContent = line + (i < lines.length - 1 ? '\n' : '');
+          if (codeStart !== null) span.dataset.ln = codeStart + i;
           frag.appendChild(span);
         });
         code.textContent = '';
         code.appendChild(frag);
 
-        pre.classList.add('has-lines');
-        pre.style.setProperty('--ln-digits', String(lines.length).length);
+        // ```言語 の行はヘッダーとして表示（行番号もここに出す）
+        if (pre.dataset.fenceLn || lang) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'code-block';
+          const header = document.createElement('div');
+          header.className = 'code-header';
+          header.textContent = lang || 'text';
+          if (pre.dataset.fenceLn) header.dataset.ln = pre.dataset.fenceLn;
+          pre.replaceWith(wrapper);
+          wrapper.append(header, pre);
+        }
       });
     }
 
@@ -357,13 +432,6 @@
     applyCodePrefs() {
       document.body.classList.toggle('ln-on', this.prefs.lineNumbers);
       document.body.classList.toggle('wrap-code', this.prefs.wrapCode);
-    }
-
-    applyTheme(theme) {
-      document.documentElement.dataset.theme = theme;
-      this.el.settingsMenu.querySelectorAll('[data-theme-value]').forEach((btn) => {
-        btn.setAttribute('aria-checked', String(btn.dataset.themeValue === theme));
-      });
     }
 
     setSettingsOpen(open) {
