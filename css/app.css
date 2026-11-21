@@ -1,33 +1,11 @@
 /* =========================================================
-   テーマ変数
-   <html data-theme="system|light|dark"> で切り替える
+   テーマ変数（ダーク固定）
    ========================================================= */
 :root {
   --navbar-h: 56px;
   --toc-w: 272px;
   --radius: 10px;
-
-  --canvas: #f6f8fa;
-  --bg: #ffffff;
-  --bg-subtle: #f6f8fa;
-  --bg-hover: #eff2f5;
-  --fg: #1f2328;
-  --fg-muted: #59636e;
-  --fg-subtle: #818b98;
-  --border: #d1d9e0;
-  --border-muted: #e6eaef;
-  --accent: #0969da;
-  --accent-fg: #ffffff;
-  --accent-subtle: #ddf4ff;
-  --code-bg: #f6f8fa;
-  --code-inline-bg: rgba(129, 139, 152, .15);
-  --line-hover: rgba(9, 105, 218, .06);
-  --shadow: 0 1px 2px rgba(31, 35, 40, .06), 0 1px 3px rgba(31, 35, 40, .08);
-  --shadow-lg: 0 8px 24px rgba(31, 35, 40, .16);
-  color-scheme: light;
-}
-
-:root[data-theme="dark"] {
+  --gutter-w: 48px;          /* 行番号の欄の幅 */
   --canvas: #010409;
   --bg: #0d1117;
   --bg-subtle: #151b23;
@@ -48,27 +26,11 @@
   color-scheme: dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root[data-theme="system"] {
-    --canvas: #010409;
-    --bg: #0d1117;
-    --bg-subtle: #151b23;
-    --bg-hover: #1c232c;
-    --fg: #e6edf3;
-    --fg-muted: #9198a1;
-    --fg-subtle: #6e7681;
-    --border: #3d444d;
-    --border-muted: #262c36;
-    --accent: #4493f8;
-    --accent-fg: #ffffff;
-    --accent-subtle: rgba(56, 139, 253, .16);
-    --code-bg: #151b23;
-    --code-inline-bg: rgba(101, 108, 118, .25);
-    --line-hover: rgba(68, 147, 248, .08);
-    --shadow: 0 0 0 1px #262c36;
-    --shadow-lg: 0 8px 24px rgba(1, 4, 9, .6);
-    color-scheme: dark;
-  }
+/* 行番号の高さ合わせ用：要素ごとの1行の高さ(1lh)を px で子に継承させる */
+@property --row-h {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
 }
 
 /* =========================================================
@@ -248,29 +210,6 @@ body.drag-over .drag-drop-area { border-color: var(--accent); background: var(--
   box-shadow: var(--shadow-lg);
   z-index: 1200;
 }
-
-.settings-group { margin-bottom: 8px; }
-.settings-label { font-size: 12px; color: var(--fg-muted); margin-bottom: 6px; }
-
-.segmented {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  padding: 3px;
-  gap: 3px;
-  border-radius: 8px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-muted);
-}
-.segmented button {
-  padding: 6px 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  font-size: 13px;
-  color: var(--fg-muted);
-  cursor: pointer;
-}
-.segmented button[aria-checked="true"] { background: var(--bg); color: var(--fg); box-shadow: var(--shadow); font-weight: 600; }
 
 .settings-row {
   display: flex;
@@ -468,62 +407,57 @@ body.drag-over .drag-drop-area { border-color: var(--accent); background: var(--
 .toc-list.filtering .toc-item.collapsed > ul { display: block; }
 
 /* =========================================================
-   コードブロックの行番号
-   各行を <span class="line"> で包む。行番号は ::before で描画するので
-   コピーしても番号は含まれない。
+   元ファイルの行番号（VSCode 風のガター）
+   描画時に各ブロック・リスト項目・表の行・コードの各行へ data-ln="元の行番号" を付け、
+   ::before で本文の左側に表示する。コピーしても番号は含まれない。
    ========================================================= */
-.markdown-body pre { position: relative; }
+.markdown-body { position: relative; }
 
-.markdown-body pre code { display: block; width: max-content; min-width: 100%; }
+body.ln-on .content { padding-left: calc(48px + var(--gutter-w)); }
 
-.markdown-body pre .line { display: block; }
+body.ln-on .markdown-body [data-ln] { --row-h: 1lh; }
 
-body.ln-on .markdown-body pre.has-lines {
-  padding-left: 0;
-  counter-reset: line;
-  --gutter: calc(var(--ln-digits, 2) * 1ch + 2.2em);
-}
-
-body.ln-on .markdown-body pre.has-lines .line {
-  counter-increment: line;
-  padding-left: var(--gutter);
-  text-indent: calc(-1 * var(--gutter));   /* 折り返し時のぶら下げインデント */
-}
-
-body.ln-on .markdown-body pre.has-lines .line::before {
-  content: counter(line);
-  display: inline-block;
-  width: var(--gutter);
-  padding: 0 1.2em 0 .5em;
+body.ln-on .markdown-body [data-ln]::before {
+  content: attr(data-ln);
+  position: absolute;
+  left: calc(-1 * var(--gutter-w) - 14px);
+  width: var(--gutter-w);
+  height: var(--row-h);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font: 400 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-style: normal;
+  letter-spacing: 0;
   text-indent: 0;
-  text-align: right;
   color: var(--fg-subtle);
-  background: var(--code-bg);
-  position: sticky;   /* 横スクロールしても行番号は固定 */
-  left: 0;
+  opacity: .75;
   -webkit-user-select: none;
   user-select: none;
+  pointer-events: none;
 }
 
-@media (hover: hover) {
-  body.ln-on .markdown-body pre.has-lines .line:hover { background: var(--line-hover); }
-  body.ln-on .markdown-body pre.has-lines .line:hover::before { color: var(--fg-muted); }
+/* 見出し横の # リンクはガターと重なるので行番号表示中は隠す */
+body.ln-on .markdown-body .heading-anchor { display: none; }
+
+/* コードブロック：見出し行（```言語）＋本体 */
+.markdown-body .code-block { margin-bottom: 16px; }
+.markdown-body .code-block > pre { margin-bottom: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+.markdown-body .code-header {
+  padding: 4px 12px;
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--fg-subtle);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-muted);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
 }
+
+.markdown-body pre code { display: block; width: max-content; min-width: 100%; }
+.markdown-body pre .line { display: block; }
 
 /* 折り返しモード */
 body.wrap-code .markdown-body pre code { width: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-
-/* コード言語ラベル */
-.markdown-body pre[data-lang]::after {
-  content: attr(data-lang);
-  position: absolute;
-  top: 6px;
-  right: 10px;
-  font-size: 11px;
-  color: var(--fg-subtle);
-  pointer-events: none;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
 
 /* =========================================================
    フローティングボタン
@@ -646,6 +580,9 @@ body.wrap-code .markdown-body pre code { width: auto; white-space: pre-wrap; ove
 }
 
 @media (max-width: 600px) {
+  :root { --gutter-w: 34px; }
+  body.ln-on .content { padding-left: calc(16px + var(--gutter-w)); }
+  body.ln-on .markdown-body [data-ln]::before { font-size: 11px; left: calc(-1 * var(--gutter-w) - 8px); }
   .reading-stats { display: none; }
   .markdown-body { font-size: 15.5px; }
   .content { padding: 20px 16px; }
@@ -656,7 +593,7 @@ body.wrap-code .markdown-body pre code { width: auto; white-space: pre-wrap; ove
    ========================================================= */
 @media print {
   .navbar, .toc-panel, .toc-fab, .back-to-top, .reading-progress, .install-prompt, .toc-backdrop { display: none !important; }
-  body { background: #fff; }
+  body { background: #fff; color: #1f2328; }
   .layout { display: block; padding: 0; }
   .content { border: 0; box-shadow: none; padding: 0; max-width: none; }
 }

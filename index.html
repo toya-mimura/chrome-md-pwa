@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="ja" data-theme="system">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="description" content="Progressive Web App for viewing Markdown files with table of contents and reading enhancements">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="color-scheme" content="dark">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MD Viewer">
 
   <title>Markdown Viewer PWA</title>
@@ -18,11 +18,6 @@
   <link rel="icon" type="image/png" sizes="48x48" href="icons/icon48.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon192.png">
   <link rel="apple-touch-icon" href="icons/icon192.png">
-
-  <!-- テーマを描画前に適用してチラつきを防ぐ -->
-  <script>
-    try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'system'; } catch (e) {}
-  </script>
 
   <link rel="stylesheet" href="css/github-markdown.css">
   <link rel="stylesheet" href="css/app.css">
@@ -73,16 +68,8 @@
                 <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="5" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="19" r="1.8" fill="currentColor"/></svg>
               </button>
               <div id="settings-menu" class="settings-menu" role="menu" hidden>
-                <div class="settings-group">
-                  <div class="settings-label">テーマ</div>
-                  <div class="segmented" role="radiogroup" aria-label="テーマ">
-                    <button data-theme-value="system" role="radio">システム</button>
-                    <button data-theme-value="light" role="radio">ライト</button>
-                    <button data-theme-value="dark" role="radio">ダーク</button>
-                  </div>
-                </div>
                 <label class="settings-row">
-                  <span>コードの行番号</span>
+                  <span>行番号（元ファイル）</span>
                   <input type="checkbox" id="line-numbers-toggle" class="switch">
                 </label>
                 <label class="settings-row">
