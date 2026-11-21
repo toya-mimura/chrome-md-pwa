@@ -117,6 +117,60 @@ if __name__ == "__main__":
 
 > 引用ブロックの表示例です。
 
+## リッチ表示
+
+### 注記ボックス
+
+> [!NOTE]
+> GitHub と同じ書き方で注記ボックスになります。
+
+> [!TIP]
+> `> [!TIP]` はヒント、`[!IMPORTANT]` は重要、`[!WARNING]` は警告、`[!CAUTION]` は注意です。
+
+> [!WARNING]
+> 翻訳ボタン（文A）を押すと Gemini で文書全体を翻訳します。API キーは ⋮ メニューの「Gemini 翻訳の設定」で入力します。
+
+### 数式
+
+二次方程式 $ax^2 + bx + c = 0$ の解は次のとおりです。$5 と $10 のような金額は数式になりません。
+
+$$
+x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+$$
+
+### 図（Mermaid）
+
+```mermaid
+flowchart LR
+    A[mdファイル] --> B{開き方}
+    B -->|ファイル選択| C[ビューア]
+    B -->|共有メニュー| C
+    B -->|URL| C
+    C --> D[目次・検索・翻訳]
+```
+
+### コードの色分け
+
+```typescript
+interface Article {
+  title: string;
+  tags: string[];
+  /* 複数行の
+     コメントも色分け */
+  publishedAt?: Date;
+}
+
+export const slug = (a: Article): string =>
+  a.title.toLowerCase().replace(/\s+/g, "-");
+```
+
+```hlsl
+float4 PSMain(float4 pos : SV_POSITION, float2 uv : TEXCOORD0) : SV_TARGET
+{
+    return tex.Sample(samp, uv) * tint;
+}
+```
+
 ## Conclusion
 
 This concludes our test document. The TOC should show all the headings in a hierarchical structure, and clicking on any TOC item should smoothly scroll to the corresponding section.

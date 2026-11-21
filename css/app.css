@@ -441,11 +441,16 @@ body.ln-on .markdown-body [data-ln]::before {
 /* 見出し横の # リンクはガターと重なるので行番号表示中は隠す */
 body.ln-on .markdown-body .heading-anchor { display: none; }
 
-/* コードブロック：見出し行（```言語）＋本体 */
+/* コードブロック：ヘッダー（```言語・コピー）＋本体 */
 .markdown-body .code-block { margin-bottom: 16px; }
 .markdown-body .code-block > pre { margin-bottom: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
 .markdown-body .code-header {
-  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 2px 6px 2px 12px;
   font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: var(--fg-subtle);
   background: var(--bg-subtle);
@@ -453,6 +458,77 @@ body.ln-on .markdown-body .heading-anchor { display: none; }
   border-bottom: 0;
   border-radius: 8px 8px 0 0;
 }
+.markdown-body .code-actions { display: flex; gap: 4px; }
+.markdown-body .code-action {
+  padding: 2px 8px;
+  font: 12px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+  color: var(--fg-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.markdown-body .code-action:hover { color: var(--fg); background: var(--bg-hover); border-color: var(--border-muted); }
+.markdown-body .code-action.done { color: #3fb950; }
+
+/* highlight.js：背景は既存のコードブロックの色を使う */
+.markdown-body pre code.hljs { background: transparent; padding: 0; color: #e6edf3; }
+
+/* Mermaid の図 */
+.markdown-body .code-block.is-mermaid .mermaid-diagram {
+  padding: 16px;
+  overflow-x: auto;
+  text-align: center;
+  background: var(--code-bg);
+  border: 1px solid var(--border-muted);
+  border-radius: 0 0 8px 8px;
+}
+.markdown-body .mermaid-diagram svg { max-width: 100%; height: auto; }
+.markdown-body .code-block.show-diagram:not(.show-source) > pre { display: none; }
+.markdown-body .code-block.show-source .mermaid-diagram:not(.mermaid-error) { display: none; }
+.markdown-body .mermaid-error {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #f85149;
+  background: rgba(248, 81, 73, .1);
+  border: 1px solid var(--border-muted);
+  border-bottom: 0;
+}
+.markdown-body .code-block.mermaid-loading .code-lang::after { content: " · 図を準備中…"; }
+
+/* 数式 */
+.markdown-body .math-block {
+  margin: 0 0 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+.markdown-body .math-block .katex-display { margin: .5em 0; }
+.markdown-body .math-inline .katex { font-size: 1.05em; }
+.markdown-body .math-error { color: #f85149; }
+
+/* GitHub アラート（> [!NOTE] など） */
+.markdown-body .markdown-alert {
+  margin-bottom: 16px;
+  padding: 8px 16px;
+  border-left: .25em solid var(--alert-color);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--alert-color) 7%, transparent);
+}
+.markdown-body .markdown-alert > :last-child { margin-bottom: 0; }
+.markdown-body .markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: var(--alert-color);
+}
+.markdown-body .markdown-alert-note { --alert-color: #4493f8; }
+.markdown-body .markdown-alert-tip { --alert-color: #3fb950; }
+.markdown-body .markdown-alert-important { --alert-color: #ab7df8; }
+.markdown-body .markdown-alert-warning { --alert-color: #d29922; }
+.markdown-body .markdown-alert-caution { --alert-color: #f85149; }
 
 .markdown-body pre code { display: block; width: max-content; min-width: 100%; }
 .markdown-body pre .line { display: block; }
@@ -726,3 +802,67 @@ body.wrap-code .markdown-body pre code { width: auto; white-space: pre-wrap; ove
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* =========================================================
+   翻訳（Gemini）
+   ========================================================= */
+.translate-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  border-radius: 999px;
+}
+#translate-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-subtle); }
+
+.settings-link {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border-muted);
+  margin-top: 4px;
+  padding-top: 12px;
+  background: none;
+  text-align: left;
+  color: var(--fg);
+}
+.settings-link:hover { color: var(--accent); }
+
+.dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+}
+.dialog::backdrop { background: rgba(0, 0, 0, .55); }
+.dialog form { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.dialog h2 { margin: 0; font-size: 18px; }
+.dialog-note, .dialog-hint { margin: 0; font-size: 13px; color: var(--fg-muted); line-height: 1.6; }
+.dialog-hint { font-size: 12px; color: var(--fg-subtle); }
+.dialog-hint code { font-size: 11px; padding: 1px 4px; border-radius: 4px; background: var(--code-inline-bg); }
+.dialog-status { margin: 0; min-height: 1em; font-size: 12px; color: var(--accent); }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--fg-muted); }
+.field small { font-size: 11px; color: var(--fg-subtle); }
+.field-row { display: flex; gap: 8px; }
+.field-row .upload-button { width: auto; flex: 0 0 auto; padding: 8px 12px; font-size: 13px; }
+.field input, .field select {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--fg);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.field input:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
+.dialog-buttons { display: flex; align-items: center; gap: 8px; }
+.dialog-buttons .spacer { flex: 1; }
+.dialog-buttons .upload-button { width: auto; padding: 9px 16px; }
+.text-button.danger { color: #f85149; }

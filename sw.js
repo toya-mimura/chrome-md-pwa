@@ -3,10 +3,11 @@
  * - アプリ本体は stale-while-revalidate：キャッシュから即表示しつつ裏で更新し、
  *   次回起動時には新しい版が使われる
  * - 更新時は CACHE_VERSION を上げる
+ * - Mermaid / KaTeX は大きいので事前キャッシュせず、初めて使ったときにキャッシュする
  * - Android の「共有」から送られたファイル/テキスト（Share Target）を受け取り、
  *   一時的にキャッシュへ置いてからアプリに渡す
  */
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const SHARE_CACHE = 'mdv-share-inbox';
 const CACHE_NAME = `md-viewer-${CACHE_VERSION}`;
 
@@ -18,6 +19,10 @@ const PRECACHE = [
   './js/app.js',
   './js/library.js',
   './js/search.js',
+  './js/rich.js',
+  './js/translate.js',
+  './js/vendor/highlight.min.js',
+  './css/vendor/hljs-github-dark.min.css',
   './js/vendor/marked.min.js',
   './js/vendor/purify.min.js',
   './manifest.json',
