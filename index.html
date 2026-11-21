@@ -1,128 +1,142 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" data-theme="system">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="description" content="Progressive Web App for viewing Markdown files with table of contents and reading enhancements">
-  <meta name="theme-color" content="#0366d6">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="MD Viewer">
-  
+
   <title>Markdown Viewer PWA</title>
-  
+
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="16x16" href="icons/icon16.png">
   <link rel="icon" type="image/png" sizes="48x48" href="icons/icon48.png">
-  <link rel="icon" type="image/png" sizes="128x128" href="icons/icon128.png">
-  <link rel="apple-touch-icon" href="icons/icon128.png">
-  
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon192.png">
+  <link rel="apple-touch-icon" href="icons/icon192.png">
+
+  <!-- テーマを描画前に適用してチラつきを防ぐ -->
+  <script>
+    try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'system'; } catch (e) {}
+  </script>
+
   <link rel="stylesheet" href="css/github-markdown.css">
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
   <div id="app">
-    <div id="upload-area" class="upload-area">
+    <!-- ===== ファイル選択画面 ===== -->
+    <section id="upload-area" class="upload-area">
       <div class="upload-content">
-        <div class="upload-icon">📄</div>
-        <h1>Markdown Viewer PWA</h1>
+        <div class="upload-icon" aria-hidden="true">📄</div>
+        <h1>Markdown Viewer</h1>
         <p>スマホでも使えるMarkdownビューアー</p>
-        
+
         <div class="upload-methods">
-          <div class="upload-method">
-            <input type="file" id="file-input" accept=".md,.markdown,.txt" style="display: none;">
-            <button id="file-button" class="upload-button">📁 ファイルを選択</button>
-          </div>
-          
-          <div class="upload-method">
-            <button id="paste-button" class="upload-button">📋 クリップボードから貼り付け</button>
-          </div>
-          
-          <div class="upload-method">
-            <button id="sample-button" class="upload-button">📖 サンプルを表示</button>
-          </div>
+          <input type="file" id="file-input" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" hidden>
+          <button id="file-button" class="upload-button primary">📁 ファイルを選択</button>
+          <button id="paste-button" class="upload-button">📋 クリップボードから貼り付け</button>
+          <button id="sample-button" class="upload-button">📖 サンプルを表示</button>
         </div>
-        
+
         <div class="drag-drop-area" id="drag-drop-area">
-          <p>ここにMarkdownファイルをドラッグ&ドロップ</p>
+          <p>ここにMarkdownファイルをドラッグ&amp;ドロップ</p>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div id="markdown-viewer" class="markdown-viewer" style="display: none;">
+    <!-- ===== ビューア画面 ===== -->
+    <section id="markdown-viewer" class="markdown-viewer" hidden>
+      <div class="reading-progress" aria-hidden="true"><div class="reading-progress-bar"></div></div>
+
       <nav class="navbar">
         <div class="navbar-container">
-          <div class="navbar-brand">
-            <span class="brand-icon">📄</span>
-            <span class="brand-text">MD Viewer</span>
-          </div>
-          
-          <button class="navbar-toggle" id="navbar-toggle" aria-label="メニューを開く">
-            <span class="hamburger-line"></span>
-            <span class="hamburger-line"></span>
-            <span class="hamburger-line"></span>
+          <button id="toc-toggle" class="icon-button" title="目次の表示/非表示" aria-label="目次の表示/非表示" aria-controls="toc-panel">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h13" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
           </button>
-          
-          <div class="navbar-menu" id="navbar-menu">
-            <div class="navbar-nav">
-              <button id="toc-toggle" class="nav-item nav-button" title="目次の表示/非表示">
-                <span class="nav-icon">📋</span>
-                <span class="nav-text">目次</span>
+
+          <div class="navbar-title" id="doc-title">MD Viewer</div>
+
+          <div class="navbar-actions">
+            <span id="reading-stats" class="reading-stats"></span>
+
+            <button id="new-file-button" class="icon-button" title="別のファイルを開く" aria-label="別のファイルを開く">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/></svg>
+            </button>
+
+            <div class="menu-wrapper">
+              <button id="settings-button" class="icon-button" title="表示設定" aria-label="表示設定" aria-haspopup="true" aria-expanded="false">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="5" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="19" r="1.8" fill="currentColor"/></svg>
               </button>
-              
-              <button id="new-file-button" class="nav-item nav-button" title="新しいファイルを開く">
-                <span class="nav-icon">📄</span>
-                <span class="nav-text">新しいファイル</span>
-              </button>
-              
-              <div class="nav-item nav-select-wrapper">
-                <span class="nav-icon">🎨</span>
-                <select id="theme-selector" class="nav-select">
-                  <option value="system">システム</option>
-                  <option value="light">ライト</option>
-                  <option value="dark">ダーク</option>
-                </select>
-              </div>
-              
-              <div class="nav-item nav-stats">
-                <span id="reading-stats" class="reading-stats"></span>
+              <div id="settings-menu" class="settings-menu" role="menu" hidden>
+                <div class="settings-group">
+                  <div class="settings-label">テーマ</div>
+                  <div class="segmented" role="radiogroup" aria-label="テーマ">
+                    <button data-theme-value="system" role="radio">システム</button>
+                    <button data-theme-value="light" role="radio">ライト</button>
+                    <button data-theme-value="dark" role="radio">ダーク</button>
+                  </div>
+                </div>
+                <label class="settings-row">
+                  <span>コードの行番号</span>
+                  <input type="checkbox" id="line-numbers-toggle" class="switch">
+                </label>
+                <label class="settings-row">
+                  <span>コードを折り返す</span>
+                  <input type="checkbox" id="wrap-code-toggle" class="switch">
+                </label>
               </div>
             </div>
           </div>
         </div>
       </nav>
-      
-      <div class="markdown-container"></div>
-        <div class="content-wrapper">
-          <div id="toc-panel" class="toc-panel">
-            <div class="toc-header">目次</div>
-            <div id="toc-list" class="toc-list"></div>
-          </div>
-          <div class="markdown-content">
-            <div class="reading-progress">
-              <div class="reading-progress-bar"></div>
-            </div>
-            <div class="markdown-body"></div>
-          </div>
-        </div>
-        <button id="back-to-top" class="back-to-top" title="トップに戻る">↑</button>
-      </div>
-    </div>
 
-    <div id="install-prompt" class="install-prompt" style="display: none;">
+      <div class="layout" id="layout">
+        <aside id="toc-panel" class="toc-panel" aria-label="目次">
+          <div class="toc-sheet-handle" aria-hidden="true"></div>
+          <div class="toc-header">
+            <span>目次</span>
+            <div class="toc-header-actions">
+              <button id="toc-expand-all" class="text-button" title="すべて展開">展開</button>
+              <button id="toc-collapse-all" class="text-button" title="すべて折りたたむ">折りたたむ</button>
+            </div>
+          </div>
+          <input type="search" id="toc-filter" class="toc-filter" placeholder="見出しを絞り込み…" aria-label="見出しを絞り込み">
+          <nav id="toc-list" class="toc-list"></nav>
+        </aside>
+
+        <main class="content">
+          <article class="markdown-body" id="markdown-body"></article>
+        </main>
+      </div>
+
+      <div id="toc-backdrop" class="toc-backdrop" hidden></div>
+      <button id="toc-fab" class="toc-fab" aria-label="目次を開く">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h13" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+      <button id="back-to-top" class="back-to-top" title="トップに戻る" aria-label="トップに戻る">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </section>
+
+    <div id="install-prompt" class="install-prompt" hidden>
       <div class="install-content">
-        <div class="install-icon">📱</div>
-        <h3>アプリをインストール</h3>
-        <p>ホーム画面に追加してアプリのように使用できます</p>
+        <strong>アプリをインストール</strong>
+        <p>ホーム画面に追加してアプリのように使えます</p>
         <div class="install-buttons">
-          <button id="install-button" class="install-btn">インストール</button>
-          <button id="dismiss-button" class="dismiss-btn">後で</button>
+          <button id="dismiss-button" class="upload-button">後で</button>
+          <button id="install-button" class="upload-button primary">インストール</button>
         </div>
       </div>
     </div>
   </div>
 
-  <script src="marked.min.js"></script>
+  <script src="js/vendor/marked.min.js"></script>
+  <script src="js/vendor/purify.min.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
