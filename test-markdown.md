@@ -1,4 +1,4 @@
-# Test Document for Chrome MD Extension
+# Markdown Viewer サンプル
 
 This is a test markdown document to verify the table of contents functionality.
 
@@ -72,6 +72,50 @@ function testFunction() {
 | Click Navigation | ✅ Implemented |
 | Scroll Spy | ✅ Implemented |
 | Reading Progress | ✅ Implemented |
+
+## 日本語の見出し
+
+日本語の見出しでも目次からジャンプできます。[この見出しへのリンク](#日本語の見出し)や、[コードの行番号](#コードの行番号)のような文書内リンクも動きます。
+
+### 同じ名前の見出し
+
+同じ名前の見出しが複数あっても、IDが重ならないように番号が付きます。
+
+### 同じ名前の見出し
+
+こちらは2つ目です（ID は `同じ名前の見出し-1`）。
+
+### コードの行番号
+
+設定メニュー（右上の ⋮）から行番号と折り返しを切り替えられます。行番号はコピーしても含まれません。
+
+```python
+import json
+from pathlib import Path
+
+
+def load_articles(root: Path) -> list[dict]:
+    """フォルダ内の Markdown 記事を読み込む"""
+    articles = []
+    for path in sorted(root.glob("**/*.md")):
+        text = path.read_text(encoding="utf-8")
+        title = next((l.lstrip("# ") for l in text.splitlines() if l.startswith("# ")), path.stem)
+        articles.append({"path": str(path), "title": title, "chars": len(text)})
+    return articles
+
+
+if __name__ == "__main__":
+    data = load_articles(Path("./posts"))
+    print(json.dumps(data, ensure_ascii=False, indent=2))  # とても長い行は横スクロールしても行番号が左に固定されます。折り返しをオンにすると、ぶら下げインデントで表示されます。
+```
+
+### タスクリストと引用
+
+- [x] 目次の作り直し
+- [x] コードの行番号
+- [ ] ページ内検索（フェーズ2）
+
+> 引用ブロックの表示例です。
 
 ## Conclusion
 
